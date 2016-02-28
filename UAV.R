@@ -7,38 +7,79 @@ library(ggplot2)
 # - all times are in seconds
 # - angles are measured in degrees or radians, as necessary
 
+# A blog on performance can be found at: http://klsin.bpmsg.com/how-fast-can-a-quadcopter-fly/
+
 Gravity <- 9.80665
 #
-# Phantom 3
+# DJI Phantom 3
 Mass <- 1.280 # kg
 Weight <- Mass * Gravity # 12.6 N
 
-# Thrust measurements from https://youtu.be/ANxPIi203iQ
-# The total thrust is equal to the force registered on the scale PLUS the weight
-# (the scale was calibrated to read zero when the motors were not running)
+# Static thrust measurements from https://youtu.be/ANxPIi203iQ
+# ...actual thrust diminishes as airspeed increases.
 
-Thrust <- (3.7 * Gravity) + Weight
+Thrust <- 3.7 * Gravity
 
-# The initial acceleration of a UAV
-# 0 degrees is vertical
-ACCzero <- data.frame(angle = seq(from = 0, to = 2 * pi, length.out = 1000))
+# Circle divisions - actually this is the parts of pi radians (half-circle)
+CIRCLE_DIVS <- 500
 
-# Total vertical force - the vertical component of thrust minus weight
-ACCzero$vertical <- (Thrust * cos(ACCzero$angle)) - Weight
+# Number of seconds to calculate position for...
+TIME <- 60
 
-# Total horizontal force - the horizontal component of thrust
-ACCzero$horizontal <- Thrust * sin(ACCzero$angle)
+# Number of divisions per second
+TIME_DIVS <- 10
 
-# Total force acting on the UAV - Magnitude
-ACCzero$forcemag <- sqrt(ACCzero$vertical^2 + ACCzero$horizontal^2)
+TIME_VEC <- seq(from = 0, to = TIME, by = 1 / TIME_DIVS)
 
-# Total force acting on the UAV - Direction
-ACCzero$forcedir <- atan(ACCzero$horizontal / ACCzero$vertical)
+ACC_DF <- data.frame(time = vector(mode = "numeric", length = length(TIME_VEC) * CIRCLE_DIVS),  # Time, in seconds, since the start
+                     angle = vector(mode = "numeric", length = length(TIME_VEC) * CIRCLE_DIVS), # Angle in which thrust is being applied
+                     x = vector(mode = "numeric", length = length(TIME_VEC) * CIRCLE_DIVS),     # Horizontal distance from starting point
+                     y = vector(mode = "numeric", length = length(TIME_VEC) * CIRCLE_DIVS),     # Horizontal distance from starting point - normal to x in the horizontal plane
+                     z = vector(mode = "numeric", length = length(TIME_VEC) * CIRCLE_DIVS),     # Vertical distance from starting point - normal to x and y
+                     vertical = vector(mode = "numeric", length = length(TIME_VEC) * CIRCLE_DIVS),
+                     horizontal = vector(mode = "numeric", length = length(TIME_VEC) * CIRCLE_DIVS),
+                     forcemag = vector(mode = "numeric", length = length(TIME_VEC) * CIRCLE_DIVS),
+                     forcedir = vector(mode = "numeric", length = length(TIME_VEC) * CIRCLE_DIVS),
+                     accel = vector(mode = "numeric", length = length(TIME_VEC) * CIRCLE_DIVS)
+)
 
-# Acceleration is the total force divided by mass in kilograms.
-ACCzero$accel <- ACCzero$forcemag / Mass
+ACC_DF$time <- rep(TIME_VEC, each = CIRCLE_DIVS)
+ACC_DF$angle <- rep(seq(from = 0, to = pi, length.out = CIRCLE_DIVS), times = length(TIME_VEC))
 
-ACCzero$forceangle <- (ACCzero$forcedir / (2 * pi)) * 360
+for (i in TIME_VEC) {
+  INDEX <- ACC_DF$time == i
+  # The first calculations are based on {x,y,z} == {0,0,0}
+  # Subsequent calculations are based off the values for the previous iteration
+  if (i == TIME_VEC[1]) {
+    ACC_DF[INDEX, "x"] <- 0
+    ACC_DF[INDEX, "y"] <- 0
+    ACC_DF[INDEX, "z"] <- 0
+    
+    # Total vertical force - the vertical component of thrust minus weight
+    ACC_DF[INDEX, "vertical"] <- (Thrust * cos(ACC_DF[INDEX, "angle"])) - Weight
+    
+    # Total horizontal force - the horizontal component of thrust
+    ACC_DF[INDEX, "horizontal"] <- Thrust * sin(ACC_DF[INDEX, "angle"])
+    
+    # Total force acting on the UAV - Magnitude
+    ACC_DF[INDEX, "forcemag"] <- sqrt(ACC_DF[INDEX, "vertical"]^2 + ACC_DF[INDEX, "horizontal"]^2)
+    
+    # Total force acting on the UAV - Direction
+    ACC_DF[INDEX, "forcedir"] <- atan(ACC_DF[INDEX, "horizontal"] / ACC_DF[INDEX, "vertical"])
+    
+    # Acceleration is the total force divided by mass in kilograms.
+    ACC_DF[INDEX, "accel"] <- ACC_DF[INDEX, "forcemag"] / Mass
+  } else {
+    # TODO
+  }
+}
+
+ggplot(ACC_DF[ACC_DF$time == 0,], aes(x = angle, xend = angle, y = 0, yend = accel)) +
+  geom_segment() +
+  scale_x_continuous(name = "Angle of Bank (degrees)", labels = function(x) {return((x/pi)*180) }, breaks = (0:4 / 4) * pi) +
+  scale_y_continuous(name = "Acceleration (ms-2)")
 
 
-ggplot(ACCzero, aes(x = angle, y = accel)) + geom_bar(stat = "identity")
+
+
+

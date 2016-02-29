@@ -10,15 +10,32 @@ library(ggplot2)
 # A blog on performance can be found at: http://klsin.bpmsg.com/how-fast-can-a-quadcopter-fly/
 
 Gravity <- 9.80665
+
+Rho <- 1.293 # kg/m^3
+
 #
 # DJI Phantom 3
 Mass <- 1.280 # kg
 Weight <- Mass * Gravity # 12.6 N
 
+# Coefficient of Drag
+
+Cd <- 1.3
+
+# A guesstimate - 590mm diagonal, roughly half of which contributes to the area.
+Area <- (0.590^2)/2
+
 # Static thrust measurements from https://youtu.be/ANxPIi203iQ
 # ...actual thrust diminishes as airspeed increases.
+# http://www.wired.com/2014/05/modeling-the-thrust-from-a-quadcopter/
 
-Thrust <- 3.7 * Gravity
+Thrust <- function(vel) {
+  return(3.7 * Gravity)
+}
+
+Drag <- function(vel) {
+  return((Cd * Area * Rho * vel^2)/2)
+}
 
 # Circle divisions - actually this is the parts of pi radians (half-circle)
 CIRCLE_DIVS <- 500
